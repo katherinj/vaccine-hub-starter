@@ -1,17 +1,43 @@
+const bcrypt = require("bcrypt")
 const db = require("../db")
+const { BCRYPT_WORK_FACTOR } = require("../config")
 const { UnauthorizedError, BadRequestError } = require ("../utils/errors")
 
 
 class User {
+    static async makePublicUser(user){
+        return{
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            location: user.location,
+            date: user.date
+        }
+    }
+
     static async login(credentials){
         //user should submit their email and password
         // if any of these fields are missing, throw an error
-        //
+        const requiredFields = ["email", "password"]
+        requiredFields.forEach(field => {
+            if(!credentials.hasOwnProperty(field)){
+                throw new BadRequestError(`Missing ${field} in request body.`)
+            }
+        })
+    
         // lookup the user in the db by email
+        const user = await User.fetchUserByEmail(credentials.email)
         // if a user is found, compare the submitted password
         // with the password in the db
         //if there is a match, return the user
-        // 
+        if(user){
+            const isValid = await bcrypt.compare(credentials.password, user.password)
+                if(isValid){
+                    return User.makePublicUser(user)
+                }
+        }
+        
         //if any of this goes wrong, throw an error
         throw new UnauthorizedError("Invalid email/password combo")
     }
@@ -19,7 +45,8 @@ class User {
     static async register(credentials){
         // user should submit their email, pw, rsvp status
         // if any of those fields are missing, throw an error
-        const requiredFields = ["id", "password", "first_name", "last_name", "email", "location", "date"]
+        const requiredFields = ["password", "firstName", "lastName", "email", "location", "date"]
+        console.log(credentials)
         requiredFields.forEach(field => {
             if(!credentials.hasOwnProperty(field)){
                 throw new BadRequestError(`Missing ${field} in request body.`)
@@ -39,39 +66,41 @@ class User {
         }
         
         // take the users password and hash it
+        const hashedPassword = await bcrypt.hash(credentials.password, BCRYPT_WORK_FACTOR)
         // take the users email and lower case it
         const lowercasedEmail = credentials.email.toLowerCase()
 
 
         // create a new user in the db with all their info
         const result = await db.query(
-            `INSERT INTO users {
+            `INSERT INTO users (
                 email, 
                 password,
                 first_name,
-                last_name
-            }
-            VALUES ($1, $2, $3, $4)
+                last_name,
+                location,
+                date
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING 
-                id, 
+                email,
                 password, 
                 first_name, 
-                last_name, 
-                email, 
+                last_name,  
                 location, 
                 date;
-            `,[id,
-                credentials.password, 
-                credentials.first_name, 
-                credentials.last_name], 
+            `,[ 
                 lowercasedEmail, 
+                hashedPassword, 
+                credentials.firstName, 
+                credentials.lastName,  
                 credentials.location,
-                credentials.date 
+                credentials.date] 
         )
         
         //return the user 
         const user = result.rows[0]
-        return user
+        return this.makePublicUser(user)
     }
     static async fetchUserByEmail(email){
         if (!email){
