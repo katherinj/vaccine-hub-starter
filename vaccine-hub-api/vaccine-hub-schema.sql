@@ -5,4 +5,4 @@ CREATE TABLE users (
     rsvp_stats  BOOLEAN NOT NULL,
     num_guests  INTEGER NOT NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT NOW()
-)
+);
